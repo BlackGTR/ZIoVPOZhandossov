@@ -18,13 +18,19 @@ target/
 .settings
 .springBeans
 .sts4-cache
-
+.env
+*.p12
+*.jks
+*.pem
+*.key
+application-local.properties
 ### IntelliJ IDEA ###
 .idea
 *.iws
 *.iml
 *.ipr
-
+application-local.yml
+application-local.properties
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
