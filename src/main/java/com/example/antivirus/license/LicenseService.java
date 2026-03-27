@@ -1,20 +1,18 @@
 package com.example.antivirus.license;
 
 import com.example.antivirus.license.dto.*;
+import com.example.antivirus.signature.TicketSigningService;
 import com.example.antivirus.user.User;
 import com.example.antivirus.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
-import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.util.HexFormat;
 import java.util.UUID;
 
 @Service
@@ -27,9 +25,9 @@ public class LicenseService {
     private final DeviceRepository devices;
     private final DeviceLicenseRepository deviceLicenses;
     private final UserRepository users;
+    private final TicketSigningService ticketSigningService;
 
     private final long ticketTtlSeconds;
-    private final String signSecret;
 
     public LicenseService(ProductRepository products,
                           LicenseTypeRepository types,
@@ -38,8 +36,8 @@ public class LicenseService {
                           DeviceRepository devices,
                           DeviceLicenseRepository deviceLicenses,
                           UserRepository users,
-                          @Value("${security.jwt.access-ttl-seconds}") long ticketTtlSeconds,
-                          @Value("${security.jwt.secret}") String signSecret) {
+                          TicketSigningService ticketSigningService,
+                          @Value("${security.jwt.access-ttl-seconds}") long ticketTtlSeconds) {
         this.products = products;
         this.types = types;
         this.licenses = licenses;
@@ -47,8 +45,8 @@ public class LicenseService {
         this.devices = devices;
         this.deviceLicenses = deviceLicenses;
         this.users = users;
+        this.ticketSigningService = ticketSigningService;
         this.ticketTtlSeconds = ticketTtlSeconds;
-        this.signSecret = signSecret;
     }
 
     @Transactional
@@ -146,7 +144,7 @@ public class LicenseService {
         licenses.save(license);
 
         Ticket ticket = buildTicket(license, device.getId());
-        return new TicketResponse(ticket, sign(ticket));
+        return new TicketResponse(ticket, ticketSigningService.sign(ticket));
     }
 
     @Transactional(readOnly = true)
@@ -169,7 +167,7 @@ public class LicenseService {
         var license = licenseOpt.orElseThrow(() -> notFound("Active license not found"));
 
         Ticket ticket = buildTicket(license, device.getId());
-        return new TicketResponse(ticket, sign(ticket));
+        return new TicketResponse(ticket, ticketSigningService.sign(ticket));
     }
 
     @Transactional
@@ -206,7 +204,7 @@ public class LicenseService {
         licenses.save(license);
 
         Ticket ticket = buildTicket(license, null);
-        return new TicketResponse(ticket, sign(ticket));
+        return new TicketResponse(ticket, ticketSigningService.sign(ticket));
     }
 
     private Ticket buildTicket(License license, Long deviceId) {
@@ -219,24 +217,6 @@ public class LicenseService {
         ticket.setDeviceId(deviceId);
         ticket.setBlocked(license.isBlocked());
         return ticket;
-    }
-
-    private String sign(Ticket ticket) {
-        String payload = ticket.getServerTime().toEpochMilli() + "|" +
-                ticket.getTtlSeconds() + "|" +
-                (ticket.getActivationDate() != null ? ticket.getActivationDate() : "") + "|" +
-                (ticket.getExpirationDate() != null ? ticket.getExpirationDate() : "") + "|" +
-                (ticket.getUserId() != null ? ticket.getUserId() : "") + "|" +
-                (ticket.getDeviceId() != null ? ticket.getDeviceId() : "") + "|" +
-                ticket.isBlocked();
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(signSecret.getBytes(StandardCharsets.UTF_8));
-            byte[] dig = md.digest(payload.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(dig);
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot sign ticket", e);
-        }
     }
 
     private static ResponseStatusException notFound(String msg) {
@@ -262,4 +242,3 @@ public class LicenseService {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "User not found"));
     }
 }
-

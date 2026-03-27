@@ -31,6 +31,8 @@ jobs:
       DB_PASSWORD: postgres
       JWT_SECRET: CI_JWT_SECRET_KEY_AT_LEAST_32_CHARS_LONG_2026
       SSL_KEYSTORE_PASSWORD: ${{ secrets.SSL_KEYSTORE_PASSWORD }}
+      SIGNATURE_KEY_STORE_PASSWORD: ${{ secrets.SSL_KEYSTORE_PASSWORD }}
+      SIGNATURE_PUBLIC_KEY: ${{ vars.SIGNATURE_PUBLIC_KEY }}
 
     steps:
       - name: Checkout
@@ -62,4 +64,3 @@ jobs:
         with:
           name: antivirus-jar
           path: target/*.jar
-
