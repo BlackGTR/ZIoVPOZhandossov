@@ -2,10 +2,16 @@ package com.example.antivirus.auth;
 
 import com.example.antivirus.auth.dto.*;
 import com.example.antivirus.security.JwtService;
+import com.example.antivirus.user.Role;
+import com.example.antivirus.user.User;
 import com.example.antivirus.user.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -40,6 +46,52 @@ public class AuthController {
         this.refreshTtl = refreshTtl;
     }
 
+    @PostMapping("/register")
+    public RegisterResponse register(@RequestBody RegisterRequest req, Authentication authentication) {
+        if (req.username() == null || req.username().isBlank()
+                || req.password() == null || req.password().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "username and password required");
+        }
+        if (users.existsByUsername(req.username())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "username already exists");
+        }
+
+        boolean firstUser = users.count() == 0;
+        if (!firstUser) {
+            if (authentication == null || !isAdmin(authentication)) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "admin only");
+            }
+        }
+
+        Role role = resolveRole(req.role(), firstUser);
+
+        User u = new User();
+        u.setUsername(req.username().trim());
+        u.setPasswordHash(encoder.encode(req.password()));
+        u.setRole(role);
+        u.setEnabled(true);
+        u = users.save(u);
+
+        return new RegisterResponse(u.getId(), u.getUsername(), u.getRole().name());
+    }
+
+    private static boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch("ROLE_ADMIN"::equals);
+    }
+
+    private static Role resolveRole(String roleStr, boolean firstUser) {
+        if (roleStr == null || roleStr.isBlank()) {
+            return firstUser ? Role.ROLE_ADMIN : Role.ROLE_USER;
+        }
+        try {
+            return Role.valueOf(roleStr.trim());
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "role must be ROLE_USER or ROLE_ADMIN");
+        }
+    }
+
     @PostMapping("/login")
     public TokenResponse login(@RequestBody LoginRequest req) {
         var user = users.findByUsername(req.username())
@@ -55,12 +107,12 @@ public class AuthController {
         // храним хэш refresh токена (а не сам токен)
         String refreshHash = sha256(refresh);
 
-        refreshTokens.save(RefreshToken.builder()
-                .user(user)
-                .tokenHash(refreshHash)
-                .expiresAt(Instant.now().plusSeconds(refreshTtl))
-                .revoked(false)
-                .build());
+        RefreshToken rt = new RefreshToken();
+        rt.setUser(user);
+        rt.setTokenHash(refreshHash);
+        rt.setExpiresAt(Instant.now().plusSeconds(refreshTtl));
+        rt.setRevoked(false);
+        refreshTokens.save(rt);
 
         return new TokenResponse(access, refresh);
     }
@@ -82,7 +134,6 @@ public class AuthController {
                 .orElseThrow(() -> new RuntimeException("User not found"));
 
         String newAccess = jwt.generateAccess(user.getUsername(), user.getRole(), accessTtl);
-        // refresh можно оставить тем же, или выпускать новый (безопаснее) — пока оставим тот же:
         return new TokenResponse(newAccess, refresh);
     }
 

@@ -1,45 +1,69 @@
-HELP.md
+# --- Maven / build ---
 target/
-.mvn/wrapper/maven-wrapper.jar
-!**/src/main/**/target/
-!**/src/test/**/target/
-/target/
-*.iml
+pom.xml.tag
+pom.xml.releaseBackup
+release.properties
+dependency-reduced-pom.xml
+build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# --- IDE ---
 .idea/
-*.log
-.env
-*.jks
-*.p12
-### STS ###
+*.iml
+*.ipr
+*.iws
+.vscode/
 .apt_generated
 .classpath
 .factorypath
 .project
-.settings
+.settings/
 .springBeans
 .sts4-cache
-.env
-*.p12
-*.jks
-*.pem
-*.key
-application-local.properties
-### IntelliJ IDEA ###
-.idea
-*.iws
-*.iml
-*.ipr
-application-local.yml
-application-local.properties
-### NetBeans ###
+
+# --- NetBeans ---
 /nbproject/private/
 /nbbuild/
 /dist/
 /nbdist/
 /.nb-gradle/
-build/
-!**/src/main/**/build/
-!**/src/test/**/build/
 
-### VS Code ###
-.vscode/
+# --- Env & локальные профили (секреты) ---
+.env
+.env.*
+!.env.example
+*.local.properties
+application-local.properties
+application-local.yml
+application-local.yaml
+
+# --- TLS / крипто (не коммитить ключи и сторы) ---
+*.p12
+*.jks
+*.pem
+*.key
+*.csr
+*.srl
+
+# --- Логи и временные файлы ---
+*.log
+logs/
+*.tmp
+*.bak
+*~
+*.swp
+hs_err_pid*
+replay_pid*
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# --- Прочее ---
+.gradle/
+*.class
+
+# Опционально: вся папка с материалами для openssl (если не хочешь светить даже .crt в репо)
+# /certs/

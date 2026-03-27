@@ -39,7 +39,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     SecurityContextHolder.getContext().setAuthentication(auth);
                 }
             } catch (Exception ignored) {
-                // если токен плохой — просто не авторизуем
             }
         }
 

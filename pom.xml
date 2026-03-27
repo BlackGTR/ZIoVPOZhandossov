@@ -79,13 +79,6 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Lombok (если не используешь — можно удалить) -->
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-
         <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
