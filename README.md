@@ -18,7 +18,7 @@ Antivirus server, учебный проект. Бэкенд на Spring Boot. Д
 
 Задание 3. Модуль ЭЦП.
 
-3.1. По методичке (signature.md) схема такая: подпись считается по байтам канонического JSON тикета, алгоритм SHA256withRSA, строка подписи в Base64. Ключи и сертификат лежат в keystore формата PKCS12.
+3.1. По методичке схема такая: подпись считается по байтам канонического JSON тикета, алгоритм SHA256withRSA, строка подписи в Base64. Ключи и сертификат лежат в keystore формата PKCS12.
 
 3.2. Файл antivirus.p12 лежит в src/main/resources (тот же keystore, что используется для TLS). В application.properties параметры с префиксом signature: путь к keystore, тип PKCS12, пароль хранилища, alias srv23399-antivirus, алгоритм SHA256withRSA. Если отдельно не задан signature.key-password, для ключа берётся тот же пароль, что и для хранилища.
 

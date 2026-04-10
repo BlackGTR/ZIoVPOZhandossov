@@ -32,6 +32,24 @@ public class TicketSigningService {
         }
     }
 
+    /**
+     * Проверка целостности: подпись должна соответствовать каноническому JSON полезной нагрузки.
+     */
+    public boolean verify(Object payload, String signatureBase64) {
+        if (signatureBase64 == null || signatureBase64.isBlank()) {
+            return false;
+        }
+        try {
+            byte[] canonical = canonicalizer.canonicalBytes(payload);
+            Signature signature = Signature.getInstance(properties.getAlgorithm());
+            signature.initVerify(keyStoreService.getCertificate().getPublicKey());
+            signature.update(canonical);
+            return signature.verify(Base64.getDecoder().decode(signatureBase64));
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     public String getPublicKeyBase64() {
         return keyStoreService.getPublicKeyBase64();
     }

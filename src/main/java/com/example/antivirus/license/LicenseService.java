@@ -87,19 +87,12 @@ public class LicenseService {
     @Transactional
     public TicketResponse activateLicense(ActivateLicenseRequest request) {
         Long currentUserId = requireCurrentUserId();
-        if (request.getUserId() != null && !request.getUserId().equals(currentUserId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UserId does not match authenticated user");
-        }
 
         var license = licenses.findByCode(request.getActivationKey())
                 .orElseThrow(() -> notFound("License not found"));
 
         if (license.isBlocked()) {
             throw conflict("License is blocked");
-        }
-
-        if (license.getOwner() != null && !license.getOwner().getId().equals(currentUserId)) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "License belongs to another user");
         }
 
         var user = users.findById(currentUserId)
@@ -154,17 +147,27 @@ public class LicenseService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "UserId does not match authenticated user");
         }
 
+        if (request.getDeviceMac() == null || request.getDeviceMac().isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "deviceMac is required");
+        }
+        if (request.getProductId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "productId is required");
+        }
+
         var device = devices.findByMacAddress(request.getDeviceMac())
                 .orElseThrow(() -> notFound("Device not found"));
 
-        var licenseOpt = licenses.findActiveByDeviceUserAndProduct(
+        var found = licenses.findActiveLicensesForDeviceCheck(
                 request.getDeviceMac(),
                 currentUserId,
                 request.getProductId(),
                 LocalDate.now()
         );
 
-        var license = licenseOpt.orElseThrow(() -> notFound("Active license not found"));
+        if (found.isEmpty()) {
+            throw notFound("Active license not found");
+        }
+        var license = found.get(0);
 
         Ticket ticket = buildTicket(license, device.getId());
         return new TicketResponse(ticket, ticketSigningService.sign(ticket));

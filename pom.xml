@@ -54,10 +54,14 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Flyway (миграции, лучше чем ddl-auto=update) -->
+        <!-- Flyway: для PostgreSQL в Flyway 10+ нужен отдельный модуль, иначе миграции могут не применяться -->
         <dependency>
             <groupId>org.flywaydb</groupId>
             <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
         <!-- JWT -->
