@@ -5,6 +5,7 @@ import org.springframework.stereotype.Service;
 import java.security.Signature;
 import java.util.Base64;
 
+
 @Service
 public class TicketSigningService {
 
@@ -23,12 +24,23 @@ public class TicketSigningService {
     public String sign(Object payload) {
         try {
             byte[] canonical = canonicalizer.canonicalBytes(payload);
-            Signature signature = Signature.getInstance(properties.getAlgorithm());
-            signature.initSign(keyStoreService.getPrivateKey());
-            signature.update(canonical);
-            return Base64.getEncoder().encodeToString(signature.sign());
+            return Base64.getEncoder().encodeToString(signBytes(canonical));
         } catch (Exception e) {
             throw new IllegalStateException("Cannot sign payload", e);
+        }
+    }
+
+    /**
+     * Подписывает уже готовые байты (без канонизации). Нужен для подписи бинарного манифеста.
+     */
+    public byte[] signBytes(byte[] payloadBytes) {
+        try {
+            Signature signature = Signature.getInstance(properties.getAlgorithm());
+            signature.initSign(keyStoreService.getPrivateKey());
+            signature.update(payloadBytes);
+            return signature.sign();
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot sign raw bytes", e);
         }
     }
 

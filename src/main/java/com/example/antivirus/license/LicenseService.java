@@ -37,7 +37,7 @@ public class LicenseService {
                           DeviceLicenseRepository deviceLicenses,
                           UserRepository users,
                           TicketSigningService ticketSigningService,
-                          @Value("${security.jwt.access-ttl-seconds}") long ticketTtlSeconds) {
+                          @Value("${app.jwt.access-ttl-seconds:900}") long ticketTtlSeconds) {
         this.products = products;
         this.types = types;
         this.licenses = licenses;

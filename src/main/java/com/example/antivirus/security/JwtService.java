@@ -17,7 +17,8 @@ public class JwtService {
 
     private final SecretKey key;
 
-    public JwtService(@Value("${security.jwt.secret}") String secret) {
+    public JwtService(
+            @Value("${app.jwt.secret:THIS_IS_A_SUPER_LONG_SECRET_KEY_32+_CHARS_MINIMUM_2026}") String secret) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 

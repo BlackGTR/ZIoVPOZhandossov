@@ -35,8 +35,8 @@ public class AuthController {
             RefreshTokenRepository refreshTokens,
             PasswordEncoder encoder,
             JwtService jwt,
-            @Value("${security.jwt.access-ttl-seconds}") long accessTtl,
-            @Value("${security.jwt.refresh-ttl-seconds}") long refreshTtl
+            @Value("${app.jwt.access-ttl-seconds:900}") long accessTtl,
+            @Value("${app.jwt.refresh-ttl-seconds:2592000}") long refreshTtl
     ) {
         this.users = users;
         this.refreshTokens = refreshTokens;

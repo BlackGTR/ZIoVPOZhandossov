@@ -11,6 +11,19 @@ import java.security.PrivateKey;
 import java.security.cert.Certificate;
 import java.util.Base64;
 
+/**
+ * Key provider для модуля ЭЦП: загрузка PKCS12/JKS, кэш записи с приватным ключом и сертификатом.
+ * <p>
+ * <b>Когда загружается ключ:</b> не при старте приложения, а при <b>первом</b> вызове
+ * {@link #getPrivateKey()}, {@link #getCertificate()} или {@link #getPublicKeyBase64()} — внутри
+ * {@link #getEntry()} ленивая инициализация. После успешной загрузки {@link KeyStore.PrivateKeyEntry}
+ * хранится в {@link #cachedEntry} и повторно с диска не читается.
+ * <p>
+ * <b>Пароль ключа:</b> если в {@link SignatureProperties} пустой {@code keyPassword}, используется
+ * {@code keyStorePassword} (как в keytool: при отсутствии {@code -keypass} пробуют пароль хранилища).
+ * <p>
+ * Потокобезопасность: double-checked locking на {@code cachedEntry}; пара ключ/сертификат из одной записи keystore.
+ */
 @Service
 public class SignatureKeyStoreService {
 

@@ -18,11 +18,11 @@ Antivirus server, учебный проект. Бэкенд на Spring Boot. Д
 
 Задание 3. Модуль ЭЦП.
 
-3.1. По методичке схема такая: подпись считается по байтам канонического JSON тикета, алгоритм SHA256withRSA, строка подписи в Base64. Ключи и сертификат лежат в keystore формата PKCS12.
+3.1. По методичке схема такая: подпись считается по байтам канонического JSON тикета в кодировке UTF-8; канонизация — по стандарту RFC 8785 (JCS); алгоритм подписи SHA256withRSA; строка подписи в Base64. Ключи и сертификат лежат в keystore формата PKCS12.
 
 3.2. Файл antivirus.p12 лежит в src/main/resources (тот же keystore, что используется для TLS). В application.properties параметры с префиксом signature: путь к keystore, тип PKCS12, пароль хранилища, alias srv23399-antivirus, алгоритм SHA256withRSA. Если отдельно не задан signature.key-password, для ключа берётся тот же пароль, что и для хранилища.
 
-3.3. Классы в пакете com.example.antivirus.signature: SignatureProperties читает настройки из properties; SignatureKeyStoreService один раз загружает keystore в память и отдаёт приватный ключ и сертификат; JsonCanonicalizer сериализует объект тикета в канонический JSON (ключи в фиксированном порядке) и даёт байты в UTF-8; TicketSigningService вызывает канонизацию, подписывает байты через SHA256withRSA и возвращает строку Base64.
+3.3. Классы в пакете com.example.antivirus.signature: SignatureProperties читает настройки из properties; SignatureKeyStoreService при первом обращении загружает keystore в память (кэш), отдаёт приватный ключ и сертификат, при пустом key-password использует пароль хранилища; JsonCanonicalizer строит канонический JSON по правилам RFC 8785 / I‑JSON (как в эталоне JcsCanonicalizationService: порядок ключей, экранирование строк, числа как IEEE‑754 double, запрет NaN/Infinity и «ломаных» суррогатов), байты UTF-8; TicketSigningService вызывает канонизацию, подписывает байты через SHA256withRSA и возвращает строку Base64.
 
 3.4. В LicenseService ответы методов activate, check и renew собираются в TicketResponse с полями ticket и signature. Поле signature — это ЭЦП RSA по каноническому JSON тикета, а не подпись на основе хеша с секретом JWT как в прежней версии.
 
@@ -33,3 +33,17 @@ Antivirus server, учебный проект. Бэкенд на Spring Boot. Д
 3.7. GitHub: в Secrets для CI нужны SSL_KEYSTORE_P12_B64 (keystore в Base64) и SSL_KEYSTORE_PASSWORD, чтобы в пайплайне появился файл p12 и приложение собиралось. В Variables можно задать SIGNATURE_PUBLIC_KEY (публичный ключ в Base64, SubjectPublicKeyInfo) для отчёта или скрипта проверки; само приложение при обычном запуске от этой переменной не зависит.
 
 3.8. В Postman после activate в теле ответа видны ticket и длинная строка signature в Base64; по ним можно убедиться, что подпись приходит.
+
+Что показать преподавателю по чеклисту (условие → где смотреть).
+
+— Реализовано хранилище с ключами для ЭЦП.
+  Показать: файл keystore `src/main/resources/antivirus.p12` (PKCS12: внутри закрытый ключ и сертификат для подписи и TLS). В коде — `SignatureKeyStoreService` (загрузка хранилища, `getPrivateKey()`, сертификат). В конфиге — блок `signature.*` в `application.properties` (путь, тип, пароли, alias, алгоритм). В CI keystore подставляется из Secret `SSL_KEYSTORE_P12_B64` (шаг «Restore TLS keystore» в `.github/workflows/ci.yml`).
+
+— Значение публичного ключа добавлено в variables.
+  Показать: в репозитории GitHub → Settings → Secrets and variables → Actions → вкладка Variables — переменная `SIGNATURE_PUBLIC_KEY` (Base64, SubjectPublicKeyInfo из того же ключа, что в p12). В репо — строка `SIGNATURE_PUBLIC_KEY: ${{ vars.SIGNATURE_PUBLIC_KEY }}` в `.github/workflows/ci.yml` (секция `env` job), чтобы в отчёте/пайплайне было видно подключение variable.
+
+— Реализованы и работают компоненты модуля ЭЦП.
+  Показать: пакет `com.example.antivirus.signature` — четыре класса: `SignatureProperties`, `SignatureKeyStoreService`, `JsonCanonicalizer`, `TicketSigningService` (подпись и `verify`). Доказательство работы: успешный прогон CI (test/package) или локально ответ `POST /licenses/activate` с непустым полем `signature`.
+
+— Модуль ЭЦП подключен к лицензии и формируется подпись для Ticket.
+  Показать: `LicenseService` — методы `activateLicense`, `checkLicense`, `renewLicense` возвращают `new TicketResponse(ticket, ticketSigningService.sign(ticket))`. Класс `TicketResponse` — поля `ticket` и `signature`. Контроллер `LicenseController` — эндпоинты `/licenses/activate`, `/licenses/check`, `/licenses/renew`. В Postman/браузере — JSON ответа с объектом `ticket` и строкой `signature` в Base64.

@@ -5,66 +5,265 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.TreeMap;
+
 
 @Component
 public class JsonCanonicalizer {
 
     private static final ObjectMapper MAPPER = new ObjectMapper()
             .findAndRegisterModules()
-            .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true)
             .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
 
     public byte[] canonicalBytes(Object payload) {
+        if (payload == null) {
+            throw new IllegalStateException("payload is null");
+        }
         try {
-            JsonNode root = MAPPER.valueToTree(payload);
-            Object canonicalObject = normalize(root);
-            String canonicalJson = MAPPER.writeValueAsString(canonicalObject);
-            return canonicalJson.getBytes(StandardCharsets.UTF_8);
+            JsonNode node = MAPPER.valueToTree(payload);
+            StringBuilder sb = new StringBuilder();
+            writeCanonical(node, sb);
+            return sb.toString().getBytes(StandardCharsets.UTF_8);
+        } catch (IllegalStateException e) {
+            throw e;
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot canonicalize payload", e);
+            throw new IllegalStateException("canonicalization failed", e);
         }
     }
 
-    private Object normalize(JsonNode node) {
+    private void writeCanonical(JsonNode node, StringBuilder out) {
+        if (node == null || node.isMissingNode() || node.isNull()) {
+            out.append("null");
+            return;
+        }
+
         if (node.isObject()) {
-            Map<String, Object> sorted = new TreeMap<>();
-            Iterator<Map.Entry<String, JsonNode>> fields = node.fields();
-            while (fields.hasNext()) {
-                Map.Entry<String, JsonNode> field = fields.next();
-                sorted.put(field.getKey(), normalize(field.getValue()));
+            out.append('{');
+
+            List<String> names = new ArrayList<>();
+            Iterator<String> it = node.fieldNames();
+            while (it.hasNext()) {
+                names.add(it.next());
             }
-            Map<String, Object> ordered = new LinkedHashMap<>();
-            for (Map.Entry<String, Object> e : sorted.entrySet()) {
-                ordered.put(e.getKey(), e.getValue());
+            Collections.sort(names);
+
+            for (int i = 0; i < names.size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+
+                String name = names.get(i);
+                out.append('"');
+                out.append(escapeJsonString(name));
+                out.append('"');
+                out.append(':');
+
+                writeCanonical(node.get(name), out);
             }
-            return ordered;
+
+            out.append('}');
+            return;
         }
+
         if (node.isArray()) {
-            List<Object> list = new ArrayList<>();
-            for (JsonNode item : node) {
-                list.add(normalize(item));
+            out.append('[');
+            for (int i = 0; i < node.size(); i++) {
+                if (i > 0) {
+                    out.append(',');
+                }
+                writeCanonical(node.get(i), out);
             }
-            return list;
+            out.append(']');
+            return;
         }
-        if (node.isNull()) {
-            return null;
+
+        if (node.isTextual()) {
+            out.append('"');
+            out.append(escapeJsonString(node.asText()));
+            out.append('"');
+            return;
         }
+
         if (node.isBoolean()) {
-            return node.booleanValue();
+            out.append(node.asBoolean() ? "true" : "false");
+            return;
         }
-        if (node.isIntegralNumber()) {
-            return node.longValue();
+
+        if (node.isNumber()) {
+            out.append(formatNumberJcs(node));
+            return;
         }
+
+        throw new IllegalStateException("unsupported json node type: " + node.getNodeType());
+    }
+
+    private String formatNumberJcs(JsonNode node) {
+        BigDecimal original;
+        try {
+            original = node.decimalValue();
+        } catch (Exception e) {
+            throw new IllegalStateException("invalid number", e);
+        }
+
+        if (original == null) {
+            throw new IllegalStateException("invalid number");
+        }
+
         if (node.isFloatingPointNumber()) {
-            return node.doubleValue();
+            double d = node.doubleValue();
+            if (Double.isNaN(d) || Double.isInfinite(d)) {
+                throw new IllegalStateException("NaN/Infinity is not allowed");
+            }
         }
-        return node.textValue();
+
+        BigDecimal normalizedOriginal = original.stripTrailingZeros();
+        double d = normalizedOriginal.doubleValue();
+
+        if (Double.isNaN(d) || Double.isInfinite(d)) {
+            throw new IllegalStateException("NaN/Infinity is not allowed");
+        }
+
+        BigDecimal roundTrip = BigDecimal.valueOf(d).stripTrailingZeros();
+        if (roundTrip.compareTo(normalizedOriginal) != 0) {
+            throw new IllegalStateException("number is not IEEE-754 double compatible (I-JSON)");
+        }
+
+        if (d == 0.0d) {
+            return "0";
+        }
+
+        double abs = Math.abs(d);
+
+        if (abs >= 1e21d || abs < 1e-6d) {
+            return toScientificJcs(d);
+        }
+
+        return toPlainJcs(d);
+    }
+
+    private String toPlainJcs(double d) {
+        BigDecimal bd = BigDecimal.valueOf(d).stripTrailingZeros();
+        String s = bd.toPlainString();
+        if ("-0".equals(s)) {
+            return "0";
+        }
+        return s;
+    }
+
+    private String toScientificJcs(double d) {
+        BigDecimal bd = BigDecimal.valueOf(d).stripTrailingZeros();
+
+        String sign = "";
+        if (bd.signum() < 0) {
+            sign = "-";
+            bd = bd.abs();
+        }
+
+        if (bd.compareTo(BigDecimal.ZERO) == 0) {
+            return "0";
+        }
+
+        int exponent = bd.precision() - 1 - bd.scale();
+        BigDecimal mantissa = bd.movePointLeft(exponent).stripTrailingZeros();
+
+        String mantissaStr = mantissa.toPlainString();
+        if ("-0".equals(mantissaStr)) {
+            mantissaStr = "0";
+        }
+
+        String expSign = exponent >= 0 ? "+" : "";
+        return sign + mantissaStr + "e" + expSign + exponent;
+    }
+
+    private String escapeJsonString(String s) {
+        if (s == null) {
+            return "";
+        }
+
+        checkSurrogates(s);
+
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+
+            if (ch == '"') {
+                out.append("\\\"");
+                continue;
+            }
+            if (ch == '\\') {
+                out.append("\\\\");
+                continue;
+            }
+            if (ch == '\b') {
+                out.append("\\b");
+                continue;
+            }
+            if (ch == '\t') {
+                out.append("\\t");
+                continue;
+            }
+            if (ch == '\n') {
+                out.append("\\n");
+                continue;
+            }
+            if (ch == '\f') {
+                out.append("\\f");
+                continue;
+            }
+            if (ch == '\r') {
+                out.append("\\r");
+                continue;
+            }
+
+            if (ch <= 0x1F) {
+                out.append("\\u");
+                out.append(toLowerHex4(ch));
+                continue;
+            }
+
+            out.append(ch);
+        }
+
+        return out.toString();
+    }
+
+    private void checkSurrogates(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char ch = s.charAt(i);
+
+            if (Character.isHighSurrogate(ch)) {
+                if (i + 1 >= s.length()) {
+                    throw new IllegalStateException("lone high surrogate");
+                }
+
+                char next = s.charAt(i + 1);
+                if (!Character.isLowSurrogate(next)) {
+                    throw new IllegalStateException("lone high surrogate");
+                }
+
+                i++;
+                continue;
+            }
+
+            if (Character.isLowSurrogate(ch)) {
+                throw new IllegalStateException("lone low surrogate");
+            }
+        }
+    }
+
+    private String toLowerHex4(int ch) {
+        String hex = Integer.toHexString(ch);
+        while (hex.length() < 4) {
+            hex = "0" + hex;
+        }
+        if (hex.length() > 4) {
+            hex = hex.substring(hex.length() - 4);
+        }
+        return hex.toLowerCase();
     }
 }
