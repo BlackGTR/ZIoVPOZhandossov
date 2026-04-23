@@ -64,32 +64,32 @@ jobs:
           mkdir -p src/main/resources
           export KEYSTORE_B64
           python - <<'PY'
-import base64
-import os
-import pathlib
-import sys
+          import base64
+          import os
+          import pathlib
+          import sys
 
-raw = os.environ.get("KEYSTORE_B64", "")
-clean = "".join(raw.split())
-if not clean:
-    print("::error::Keystore base64 secret is empty after whitespace cleanup.", file=sys.stderr)
-    sys.exit(1)
+          raw = os.environ.get("KEYSTORE_B64", "")
+          clean = "".join(raw.split())
+          if not clean:
+              print("::error::Keystore base64 secret is empty after whitespace cleanup.", file=sys.stderr)
+              sys.exit(1)
 
-decoded = None
-for padding in ("", "=", "==", "==="):
-    try:
-        decoded = base64.b64decode(clean + padding, validate=True)
-        break
-    except Exception:
-        pass
+          decoded = None
+          for padding in ("", "=", "==", "==="):
+              try:
+                  decoded = base64.b64decode(clean + padding, validate=True)
+                  break
+              except Exception:
+                  pass
 
-if not decoded:
-    print("::error::Invalid base64 in keystore secret. Re-create SSL_KEYSTORE_P12_B64 from raw .p12 bytes.", file=sys.stderr)
-    sys.exit(1)
+          if not decoded:
+              print("::error::Invalid base64 in keystore secret. Re-create SSL_KEYSTORE_P12_B64 from raw .p12 bytes.", file=sys.stderr)
+              sys.exit(1)
 
-path = pathlib.Path("src/main/resources/antivirus.p12")
-path.write_bytes(decoded)
-PY
+          path = pathlib.Path("src/main/resources/antivirus.p12")
+          path.write_bytes(decoded)
+          PY
           test -s src/main/resources/antivirus.p12
 
       - name: Compile
