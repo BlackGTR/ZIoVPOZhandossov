@@ -4,6 +4,7 @@ on:
   push:
     branches: [ "**" ]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   build-test-package:
@@ -46,9 +47,23 @@ jobs:
           cache: maven
 
       - name: Restore TLS keystore from secret
+        env:
+          SSL_KEYSTORE_P12_B64: ${{ secrets.SSL_KEYSTORE_P12_B64 }}
+          SSL_KEYSTORE_BASE64: ${{ secrets.SSL_KEYSTORE_BASE64 }}
         run: |
+          set -e
+          KEYSTORE_B64="${SSL_KEYSTORE_P12_B64:-$SSL_KEYSTORE_BASE64}"
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Missing TLS keystore secret. Create SSL_KEYSTORE_P12_B64 (preferred) or SSL_KEYSTORE_BASE64."
+            exit 1
+          fi
+          if [ -z "${SSL_KEYSTORE_PASSWORD}" ]; then
+            echo "::error::Missing SSL_KEYSTORE_PASSWORD secret."
+            exit 1
+          fi
           mkdir -p src/main/resources
-          echo "${{ secrets.SSL_KEYSTORE_P12_B64 }}" | base64 -d > src/main/resources/antivirus.p12
+          echo "$KEYSTORE_B64" | base64 -d > src/main/resources/antivirus.p12
+          test -s src/main/resources/antivirus.p12
 
       - name: Compile
         run: mvn -B -DskipTests compile
